@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 환경변수 (비밀번호)
+.env
+*.env
+
+# 에디터·OS
+.idea/
+.vscode/
+.DS_Store
+
+# 실행 산출물
+*.log

@@ -1,0 +1,8 @@
+device_id: dev-001
+device_url: socket://127.0.0.1:5555 # 실물 장치: /dev/ttyUSB0
+backend_url: http://localhost:8000
+heartbeat_interval_sec: 10
+command_poll_interval_sec: 2
+device_ack_timeout_sec: 3
+http_request_timeout_sec: 1
+log_level: INFO
