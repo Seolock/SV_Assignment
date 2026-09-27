@@ -14,7 +14,6 @@ public class Dto {
     public static class RegisterRequest {
         @NotBlank
         private String deviceId;
-        private String deviceUrl;
         private String fw;
     }
 
@@ -29,7 +28,6 @@ public class Dto {
     @Data
     public static class DeviceDetail {
         private String deviceId;
-        private String deviceUrl;
         private String fw;
         private String status;
         private Instant lastHeartbeatAt;
@@ -74,9 +72,9 @@ public class Dto {
         private String type;
         private String value;
         private String status;
+        private String reason;
         private String source;
         private Instant createdAt;
-        private Instant updatedAt;
     }
 
     @Data

@@ -69,7 +69,6 @@ def post_devices(message):
     url = api("devices")
     payload = { 
         "device_id": message["device"],
-        "device_url": CONFIG["device_url"],
         "fw": message["fw"]
     }
     try:
@@ -121,18 +120,16 @@ def get_pending():
         r = requests.get(url, timeout=TIMEOUT)
         r.raise_for_status()
         log.info("get_pending ok: %s",CONFIG['device_id'])
-        return r.json()
+        return r.json() if r.content else None
     except Exception as e:
         log.warning("get_pending fail: %s",e)
-        return []
+        return None
 
 
 # 명령 결과 전송
 def patch_commands(cmd_id, status, reason=None):
     url = api(f"commands/{cmd_id}")
-    payload = {"status": "ACKED"}
-    if not status:
-        payload = {"status": "FAILED", "reason":reason}
+    payload = {"status": status, "reason":reason}
     try:
         r = requests.patch(url, json=payload, timeout=TIMEOUT)
         r.raise_for_status()
@@ -193,9 +190,9 @@ def handle_command(cmd):
         except queue.Empty:
             break
 
-    stat = write(cmd_id, led)
-    if not stat:
-        patch_commands(cmd_id, False, "device_disconnected")
+    state = write(cmd_id, led)
+    if not state:
+        patch_commands(cmd_id, "FAILED", "device_disconnected")
         log.warning("handle_command fail: %s", cmd_id)
         return
 
@@ -203,20 +200,20 @@ def handle_command(cmd):
     while start + CONFIG["device_ack_timeout_sec"] > time.time():
         try:
             message = ack_queue.get(timeout=1)
+            if message["id"]!=cmd_id:
+                continue
         except queue.Empty:
             continue
-        if message["id"]!=cmd_id:
-            continue
         if message["type"]=="ACK":
-            patch_commands(cmd_id, True)
+            patch_commands(cmd_id, "ACKED")
             log.info("handle_command ok: %s", cmd_id)
             return
         else:
-            patch_commands(cmd_id, False, message["reason"])
+            patch_commands(cmd_id, "FAILED", message["reason"])
             log.info("handle_command ok: %s", cmd_id)
             return
-    patch_commands(cmd_id, False, "device_timeout")
-    log.warning("handle_command fail: %s", cmd_id)
+    patch_commands(cmd_id, "FAILED", "device_timeout")
+    log.info("handle_command ok: %s", cmd_id)
 
 
 # 명령 받고 처리 - 쓰레드
@@ -225,10 +222,12 @@ def commander():
     interval = CONFIG["command_poll_interval_sec"]
 
     while not stop.wait(interval):
-        for cmd in get_pending():
-            handle_command(cmd)
-            if stop.is_set():
-                break
+        cmd = get_pending()
+        if cmd is None:
+            continue
+        handle_command(cmd)
+        if stop.is_set():
+            break
 
     log.info("commander stopped")
 
@@ -266,6 +265,8 @@ def reader():
         elif message["type"]=="HELLO":
             if message["device"]==CONFIG['device_id']:
                 post_devices(message)
+            else:
+                log.warning("config error: device_id mismatch")
         else:
             log.warning("device error: %s", message["reason"])
 
@@ -277,7 +278,7 @@ def reader():
 def sender():
 
     interval = CONFIG["heartbeat_interval_sec"]
-    next_heartbeat = 0.0
+    next_heartbeat = time.time() + 1
 
     while not stop.is_set():
 
@@ -293,7 +294,6 @@ def sender():
 
 
     log.info("sender stopped")
-
 
 
 # 메인

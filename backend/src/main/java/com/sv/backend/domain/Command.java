@@ -18,11 +18,10 @@ public class Command extends BaseEntity {
 
     @Column(unique = true, nullable = false)
     private String commandId;
-
-    private String type;    // SET_LED
+    private String type;
     private String value;   // on / off
-    private String status;  // PENDING / ACKED / FAILED
-    private String source;  // cli / rule
-    private String reason;  // FAILED 사유
+    private String status;  // PENDING / ACKED / FAILED / SENT / TIMEOUT
+    private String source;
+    private String reason;
 
 }

@@ -2,11 +2,8 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
 import time
 import requests
-import yaml
 
 
 TIMEOUT = 1
@@ -55,7 +52,6 @@ def show(r):
     print()
 
     if not r.content:
-        print("(빈 응답)")
         print()
         return
 
@@ -133,7 +129,7 @@ def run_devices(args):
         r.raise_for_status()
         show(r)
     except Exception as e:
-        print(f"devices 요청 실패: {e}", file=sys.stderr)
+        print(f"devices 요청 실패: {e}")
         return 1
 
 
@@ -145,7 +141,7 @@ def run_status(args):
         r.raise_for_status()
         show(r)
     except Exception as e:
-        print(f"status 요청 실패: {e}", file=sys.stderr)
+        print(f"status 요청 실패: {e}")
         return 1
 
 
@@ -158,7 +154,7 @@ def run_history(args):
         r.raise_for_status()
         show(r)
     except Exception as e:
-        print(f"history 요청 실패: {e}", file=sys.stderr)
+        print(f"history 요청 실패: {e}")
         return 1
 
 
@@ -175,17 +171,20 @@ def run_led(args):
 
         url = f"{args.url}/api/v1/commands/{command_id}"
         start = time.time()
-        while start + 15 >= time.time():
-            time.sleep(1)
+        last = "PENDING"
+        while start + 15 > time.time():
             r = requests.get(url, timeout=TIMEOUT)
             r.raise_for_status()
             status = r.json()["status"]
-            if status != "PENDING":
-                print(status)
+            if status != last:
+                print(status+"\n")
+                last = status
+            if status!="PENDING" and status!="SENT":
                 return
-        print("timeout")
+            time.sleep(1)
+        print("TIMEOUT\n")
     except Exception as e:
-        print(f"led 요청 실패: {e}", file=sys.stderr)
+        print(f"led 요청 실패: {e}")
         return 1
 
 
@@ -202,7 +201,7 @@ def run_rule(args):
             r.raise_for_status()
         show(r)
     except Exception as e:
-        print(f"rule 요청 실패: {e}", file=sys.stderr)
+        print(f"rule 요청 실패: {e}")
         return 1
 
 
@@ -215,7 +214,7 @@ def run_commands(args):
         r.raise_for_status()
         show(r)
     except Exception as e:
-        print(f"commands 요청 실패: {e}", file=sys.stderr)
+        print(f"commands 요청 실패: {e}")
         return 1
 
 
@@ -225,7 +224,7 @@ def main():
     try:
         return args.func(args) or 0
     except Exception as e:
-        print(f"backend error: {e}", file=sys.stderr)
+        print(f"backend error: {e}")
         return 1
 
 

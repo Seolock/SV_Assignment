@@ -31,26 +31,28 @@ public class BackendService {
     private final RuleRepository ruleRepository;
 
 
+    // 장치 저장 - 에이전트
     @Transactional
     public boolean register(Dto.RegisterRequest registerRequest) {
         Device device = deviceRepository.findByDeviceId(registerRequest.getDeviceId()).orElse(null);
         if (device == null) {
-            device = new Device(registerRequest);
+            device = toDevice(registerRequest);
             deviceRepository.save(device);
             return true;
         }
-        device.setDeviceUrl(registerRequest.getDeviceUrl());
         device.setFw(registerRequest.getFw());
         return false;
     }
 
 
+    // 장치 리스트 조회 - 콘솔
     public List<Dto.DeviceSummary> listDevices() {
         List<Device> devices = deviceRepository.findAll();
         return devices.stream().map(this::toDeviceSummary).toList();
     }
 
 
+    // 장치 상세 조회 - 콘솔
     public Dto.DeviceDetail deviceDetail(String id) {
         Device device = deviceRepository.findByDeviceId(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "device not found: " + id));
@@ -58,6 +60,7 @@ public class BackendService {
     }
 
 
+    // 하트비트 저장 - 에이전트
     @Transactional
     public void heartbeat(String id) {
         Device device = deviceRepository.findByDeviceId(id)
@@ -66,6 +69,7 @@ public class BackendService {
     }
 
 
+    // 텔레메트리 저장 - 에이전트
     @Transactional
     public void saveTelemetry(String id, Dto.TelemetrySample telemetrySample) {
         Device device = deviceRepository.findByDeviceId(id)
@@ -75,6 +79,7 @@ public class BackendService {
     }
 
 
+    // 텔레메트리 이력 조회 - 콘솔
     public List<Dto.TelemetrySample> loadTelemetries(String id, String last, int limit) {
         Device device = deviceRepository.findByDeviceId(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "device not found: " + id));
@@ -84,14 +89,16 @@ public class BackendService {
     }
 
 
+    // 명령 저장 - 콘솔
     public Dto.CommandCreateResponse createCommand(String id, Dto.CommandRequest commandRequest) {
         Device device = deviceRepository.findByDeviceId(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "device not found: " + id));
-        Command command = commandRepository.save(newCommand(device, commandRequest.getType(), commandRequest.getValue(), commandRequest.getSource()));
+        Command command = commandRepository.save(newCommand(device, commandRequest));
         return toCommandCreateResponse(command);
     }
 
 
+    // 명령 이력 조회 - 콘솔
     public List<Dto.CommandResponse> loadCommands(String id, int limit) {
         Device device = deviceRepository.findByDeviceId(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "device not found: " + id));
@@ -100,33 +107,49 @@ public class BackendService {
     }
 
 
-    public List<Dto.PendingCommandResponse> pending(String id) {
+    // 대기 명령 조회 - 에이전트
+    @Transactional
+    public Dto.PendingCommandResponse pending(String id) {
         Device device = deviceRepository.findByDeviceId(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "device not found: " + id));
-        return commandRepository.findByDeviceAndStatusOrderByCreatedAtAsc(device, "PENDING")
-                .stream().map(this::toPendingCommand).toList();
+        Command command = commandRepository.findFirstByDeviceAndStatusInOrderByCreatedAtAsc(device, List.of("PENDING", "TIMEOUT")).orElse(null);
+        if(command == null){
+            return null;
+        }
+        command.setStatus("SENT");
+        return toPendingCommand(command);
     }
 
 
+    // 명령 실행 결과 저장 - 에이전트
     @Transactional
     public void reportResult(String cmdId, Dto.CommandResult commandResult) {
         Command command = commandRepository.findByCommandId(cmdId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "command not found: " + cmdId));
-        if (!"PENDING".equals(command.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "command is not PENDING: " + cmdId);
+        if (command.getStatus().equals("SENT")) {
+            command.setStatus(commandResult.getStatus());
+            command.setReason(commandResult.getReason());
         }
-        command.setStatus(commandResult.getStatus());
-        command.setReason(commandResult.getReason());
+        else{
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "command is already finished: " + cmdId);
+        }
     }
 
 
+    // 명령 상세 조회 - 콘솔
+    @Transactional
     public Dto.CommandResponse commandDetail(String cmdId) {
         Command command = commandRepository.findByCommandId(cmdId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "command not found: " + cmdId));
+        boolean unfinished = command.getStatus().equals("PENDING") || command.getStatus().equals("SENT");
+        if (unfinished && command.getCreatedAt().plusSeconds(14).isBefore(Instant.now())) {
+            command.setStatus("TIMEOUT");
+        }
         return toCommandResponse(command);
     }
 
 
+    // 규칙 조회 - 콘솔
     public Dto.RuleResponse getRule(String id) {
         Device device = deviceRepository.findByDeviceId(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "device not found: " + id));
@@ -134,6 +157,7 @@ public class BackendService {
     }
 
 
+    // 규칙 저장 - 콘솔
     public Dto.RuleResponse setRule(String id, Dto.RuleRequest ruleRequest) {
         Device device = deviceRepository.findByDeviceId(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "device not found: " + id));
@@ -149,6 +173,7 @@ public class BackendService {
     }
 
 
+    // "30m" 같은 기간 문자열을 Duration 으로 변환.
     private Duration parseLast(String last) {
         try {
             Duration duration = Duration.parse("PT" + last.toUpperCase());
@@ -157,7 +182,7 @@ public class BackendService {
             }
         } catch (DateTimeParseException ignored) {
         }
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "last must be like 1h, 30m, 1h30m: " + last);
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "last must be like 1h, 30m: " + last);
     }
 
 
@@ -176,10 +201,11 @@ public class BackendService {
     }
 
 
+    // 새 명령 생성
     private Command newCommand(Device device, String type, String value, String source) {
         Command command = new Command();
         command.setDevice(device);
-        command.setCommandId("cmd-" + UUID.randomUUID().toString().substring(0, 8));
+        command.setCommandId("cmd-" + UUID.randomUUID().toString().substring(0, 4));
         command.setType(type);
         command.setValue(value);
         command.setStatus("PENDING");
@@ -188,6 +214,13 @@ public class BackendService {
     }
 
 
+    // 새 명령 생성 overload
+    private Command newCommand(Device device, Dto.CommandRequest commandRequest) {
+        return newCommand(device, commandRequest.getType(), commandRequest.getValue(), commandRequest.getSource());
+    }
+
+
+    // Device -> DeviceSummary
     private Dto.DeviceSummary toDeviceSummary(Device device) {
         Dto.DeviceSummary summary = new Dto.DeviceSummary();
         summary.setDeviceId(device.getDeviceId());
@@ -198,6 +231,7 @@ public class BackendService {
     }
 
 
+    // Telemetry -> TelemetrySample
     private Dto.TelemetrySample toSample(Telemetry telemetry) {
         Dto.TelemetrySample telemetrySample = new Dto.TelemetrySample();
         telemetrySample.setSeq(telemetry.getSeq());
@@ -208,10 +242,10 @@ public class BackendService {
     }
 
 
+    // Device -> DeviceDetail
     private Dto.DeviceDetail toDeviceDetail(Device device) {
         Dto.DeviceDetail detail = new Dto.DeviceDetail();
         detail.setDeviceId(device.getDeviceId());
-        detail.setDeviceUrl(device.getDeviceUrl());
         detail.setFw(device.getFw());
         detail.setStatus(device.status());
         detail.setLastHeartbeatAt(device.getLastHeartbeatAt());
@@ -223,6 +257,7 @@ public class BackendService {
     }
 
 
+    // Rule -> RuleResponse
     private Dto.RuleResponse toRuleResponse(Rule rule) {
         Dto.RuleResponse response = new Dto.RuleResponse();
         response.setMetric(rule.getMetric());
@@ -232,19 +267,21 @@ public class BackendService {
     }
 
 
+    // Command -> CommandResponse
     private Dto.CommandResponse toCommandResponse(Command command) {
         Dto.CommandResponse response = new Dto.CommandResponse();
         response.setCommandId(command.getCommandId());
         response.setType(command.getType());
         response.setValue(command.getValue());
         response.setStatus(command.getStatus());
+        response.setReason(command.getReason());
         response.setSource(command.getSource());
         response.setCreatedAt(command.getCreatedAt());
-        response.setUpdatedAt(command.getUpdatedAt());
         return response;
     }
 
 
+    // TelemetrySample -> Telemetry
     private Telemetry toTelemetry(Device device, Dto.TelemetrySample telemetrySample) {
         Telemetry telemetry = new Telemetry();
         telemetry.setDevice(device);
@@ -256,6 +293,7 @@ public class BackendService {
     }
 
 
+    // Command -> CommandCreateResponse
     private Dto.CommandCreateResponse toCommandCreateResponse(Command command) {
         Dto.CommandCreateResponse response = new Dto.CommandCreateResponse();
         response.setCommandId(command.getCommandId());
@@ -265,12 +303,22 @@ public class BackendService {
     }
 
 
+    // Command -> PendingCommandResponse
     private Dto.PendingCommandResponse toPendingCommand(Command command) {
         Dto.PendingCommandResponse response = new Dto.PendingCommandResponse();
         response.setCommandId(command.getCommandId());
         response.setType(command.getType());
         response.setValue(command.getValue());
         return response;
+    }
+
+
+    // RegisterRequest -> Device
+    private Device toDevice(Dto.RegisterRequest registerRequest) {
+        Device device = new Device();
+        device.setDeviceId(registerRequest.getDeviceId());
+        device.setFw(registerRequest.getFw());
+        return device;
     }
 
 }

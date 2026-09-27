@@ -6,6 +6,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -16,6 +17,6 @@ public interface CommandRepository extends JpaRepository<Command, Long> {
 
     List<Command> findByDeviceOrderByCreatedAtDesc(Device device, Limit limit);
 
-    List<Command> findByDeviceAndStatusOrderByCreatedAtAsc(Device device, String status);
+    Optional<Command> findFirstByDeviceAndStatusInOrderByCreatedAtAsc(Device device, Collection<String> statuses);
 
 }

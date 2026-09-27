@@ -79,7 +79,7 @@ public class BackendController {
 
     // 대기 명령 조회 - 에이전트
     @GetMapping("/devices/{id}/commands/pending")
-    public List<Dto.PendingCommandResponse> pending(@PathVariable String id) {
+    public Dto.PendingCommandResponse pending(@PathVariable String id) {
         return backendService.pending(id);
     }
 
