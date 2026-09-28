@@ -192,6 +192,8 @@
 | `last` | query | string | X | `1h` | 조회 기간 (`s`, `m`, `h` 단위, 예: `30m`, `2h`, `1h30m`) |
 | `limit` | query | integer | X | `50` | 최대 개수 (≥ 1) |
 
+제공된 예시 API와 다르게 --from --to 를 제공하지 않고 --last 만 제공함.
+
 **Response `200 OK`** — 배열 (시간 오름차순)
 
 | 필드 | 타입 | 설명 |

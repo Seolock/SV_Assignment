@@ -4,6 +4,7 @@
 
 **1단계 전체 + 심화 항목 C.**
 
+데모 영상: *[링크](https://youtu.be/4z5Wv24flbA)*
 
 ## 구조
 
@@ -73,7 +74,7 @@ svctl commands <id>                # 명령 이력
 
 ## 시뮬레이터 제어
 
-시나리오를 손으로 재현할 때 쓴다. 실행 중인 시뮬레이터에 명령을 보낸다.
+실행 중인 시뮬레이터에 명령을 보낸다.
 
 ```bash
 python3 tools/device_sim.py --ctl STATUS      # 현재 상태
@@ -157,15 +158,16 @@ python3 tools/device_sim.py --ctl AUTO         # 온도 고정 해제
 **B** 에서 `Ctrl+C` 로 에이전트를 끈다. 40초쯤 기다렸다가 **C** 에서.
 
 ```bash
-python3 console/svctl.py devices               # OFFLINE
+python3 console/svctl.py devices        # OFFLINE
 ```
 
 **B** 에서 다시 띄우고 10초 안에 확인한다.
 
 ```bash
-python3 agent/svagent.py                       # B
-python3 console/svctl.py devices               # C. ONLINE 복귀
-python3 console/svctl.py led dev-001 off       # C. ACKED
+# B
+python3 agent/svagent.py
+# C. ONLINE 복귀
+python3 console/svctl.py devices
 ```
 
 #### 5. 연결 끊김 내성
@@ -182,6 +184,37 @@ python3 console/svctl.py history dev-001 --last 1m
 ```
 
 끊긴 동안의 데이터는 유실된다. 프로세스가 죽지 않고 스스로 복구하는 것이 기준이다.
+
+
+#### 6. 명령 신뢰성 (추가 과제 C)
+
+에이전트가 없는 동안 만든 명령이 버려지지 않고, 돌아온 뒤 그대로 수행되는지 본다.
+
+**B** 에서 `Ctrl+C` 로 에이전트를 끄고 **C** 에서.
+
+```bash
+python3 console/svctl.py led dev-001 on
+```
+
+받아갈 에이전트가 없으니 `status: PENDING` 만 찍히고, 15초 뒤 `TIMEOUT` 이 찍히며 끝난다.
+
+```bash
+python3 console/svctl.py commands dev-00
+# 명령 TIMEOUT 확인
+```
+
+**B** 에서 에이전트를 다시 띄우고 몇 초 뒤 **C** 에서.
+
+```bash
+python3 agent/svagent.py
+# B
+python3 console/svctl.py commands dev-001
+# C
+python3 tools/device_sim.py --ctl STATUS
+# C
+```
+
+`command_id` 가 **같은 명령**이 `TIMEOUT` → `ACKED` 로 바뀌고 `STATUS` 에 `led=1` 이 보인다.
 
 
 ## 설계

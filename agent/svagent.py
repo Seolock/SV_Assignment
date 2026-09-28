@@ -283,7 +283,8 @@ def sender():
     while not stop.is_set():
 
         if time.time() >= next_heartbeat:
-            post_heartbeat()
+            if link is not None:
+                post_heartbeat()
             next_heartbeat = time.time() + interval
 
         try:
