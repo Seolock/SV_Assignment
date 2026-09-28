@@ -223,4 +223,8 @@ python3 tools/device_sim.py --ctl STATUS
 
 백엔드 API 명세는 [docs/openAPI.md](docs/openAPI.md).
 
+## 기타
+
+질문 답변: [./Q&A.md](./Q&A.md).
+
 AI활용: CLI 출력 형식, 시나리오 검증 스크립트, 백엔드 단위 테스트, 코드 디테일 검사
